@@ -1,0 +1,8 @@
+.slidev-layout {
+  text-align: justify;
+}
+
+.two-column-div {
+  column-count: 2;
+  column-gap: 20px;
+}
