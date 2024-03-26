@@ -321,8 +321,6 @@ image: /images/xen_msi_attack.png
 backgroundSize: contain
 ---
 
----
-
 ### Mastering the overflow
 
 We are now able to trigger an overlow inside the Xen hypervisor, starting from the address held in the `rdi` register. It turned out that juste after the Xen stack, there is *often* the IDT, which is a perfect target for the overflow.
@@ -330,3 +328,80 @@ We are now able to trigger an overlow inside the Xen hypervisor, starting from t
 However the exact location of the IDT table depends on whether we're on the BSP or on an AP. In the first case, the IDT is allocated as part of the `.bss` section and is always after BSP stack, at approx. 48 pages below. In the second case, the IDT is located right after the Xen stack, but it is not always the case, because stack and idt are allocated from the heap.
 
 Thus, if we're unlucky, the IDT might be located above the stack, and the attacker won't be able to overwrite it.
+
+---
+
+### Exploiting the IDT
+
+The exploit has two modes of operation: BSP and AP.
+
+- In the BSP mode (domains execute on CPU #0), the exploit uses the 48 pages of padding in the payload, being the distance between the `rdi` register and the IDT. The shellcode is executed as #PF handler.
+- In the AP mode, let's assume we're on CPU #1. The exploit uses 1 page of padding (on Q45 systems, depending in heap allocation layout)
+
+The attacker has to figure out on which physical CPU the untrusted domain is running, and there is no easy way to do that. We can use one of the following approaches:
+
+- Try to iteratively deliver MSIs to all CPUs, while keeping the hypercall trigger from the driver domain;
+- Combine the "1-page" and "48-page" payloads in one universal payload.
+
+One last problem is that there is no guarantee that we won't be moved to another CPU while generating the MSIs. Nevertheless, vCPU migration is not very frequent.
+
+---
+
+## Mitigating the attacks
+
+---
+
+### Interrupt Remapping
+
+Intel has introduced a new feature called Interrupt Remapping (since Sandy Bridge processors, Q1 2011, and before with Xeon processors), which seems capable of protecting against the MSIs attacks we've seen.
+
+When Interrupt Remapping is enabled, interrupts can be blocked and/or translated, depending on their originating device. The remapping tables are filled to list all allowed interrupt vectors and formats available for each device.
+
+---
+layout: center
+---
+
+![MSI interrupt remapping format](/images/msi_interrupt_format.png)
+
+---
+
+#### MSI interrupt remapping format
+
+The difference between the new format and the old one is that the new format doesn't directly specify any properties of the generated MSI, but rather only a field `handle` is spevified, that is interpreted as an index in the interrupt remapping table, managed by the hypervisor.
+
+This way, the device shouln't be able to generate MSIs with e.g. arbitrary vectors.
+
+However, some devices might not support the new format, so a compatibility format is available. In this case, the system is still vulnerable to the MSI attacks.
+
+On his side, the hypervisor configures the interrupt remapping tables as follows:
+
+- Allocates an Interrupt Vector in the global IDT for each device
+- Adds an entry to the Interrupt Remapping Table for this device
+- Writes to the device's configuratino space registers for MSI
+
+---
+
+## Conclusion
+
+We've seen that the Intel VT-d technology, while providing many benefits, can be vulnerable to software attacks that can bypass the IOMMU protection mechanism.
+
+The practical MSI attack on Xen hypervisor depends on its specific implementation, however, it shows that a small vulnerability in the hypervisor can be exploited to gain full control over the host system.
+
+The introduction of Interrupt Remapping in newer Intel processors seems to mitigate the attacks we've seen, but it is important to be aware of the potential security risks associated with VT-d technology.
+
+---
+
+## References
+
+- *[Software attacks against Intel VT-d technology](https://invisiblethingslab.com/resources/2011/Software%20Attacks%20on%20Intel%20VT-d.pdf)* by Rafal Wojtczuk and Joanna Rutkowska
+
+
+---
+layout: center
+---
+
+## Thank you for your attention!
+
+---
+layout: end
+---
