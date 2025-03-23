@@ -1,6 +1,6 @@
 ---
 theme: seriph
-background: https://source.unsplash.com/collection/94734566/1920x1080
+background: https://cover.sli.dev
 class: text-center
 highlighter: shiki
 lineNumbers: false
@@ -97,7 +97,7 @@ We can specify the CPU(s) that will receive the interrupt via the `Destination I
 
 ### MSI data format
 
-Any PCIe writes transaction with `feeXXXXh` as the address results in an interrupt signal to one of the CPUs in the system.
+Any PCIe writes transaction with `0xFEEXXXX` as the address results in an interrupt signal to one of the CPUs in the system.
 
 <div class="two-column-div">
 
@@ -105,7 +105,7 @@ Any PCIe writes transaction with `feeXXXXh` as the address results in an interru
 
 The two most important fields are:
 
-- The `Vector` field specifies the interrupt number that will be signaled to the CPU.
+- The `Vector` field specifies the interrupt number that will be signaled to the CPU (allowed values in the range `0x10`-`0xFE`).
 - The `Delivery Mode` field specifies how the interrupt will be delivered to the CPU.
 
 </div>
@@ -158,9 +158,11 @@ So what would happen if we send an MSI with the `Delivery Mode` set to `0b110` (
 The CPU will interpret it as a SIPI interrupt being delivered to one of the CPUs!
 </v-click>
 
-<p v-click at="+1">
+<div v-click at="+1">
+
 MSI packets can additionally specify a `Vector` field, which is interpreted as part of a physical address where the receiving CPU should start executing code.
-</p>
+
+</div>
 
 </div>
 
@@ -319,6 +321,8 @@ For this attack to work, the IDT must be located below the address pointed by th
 layout: image
 image: /images/xen_msi_attack.png
 backgroundSize: contain
+---
+
 ---
 
 ### Mastering the overflow
