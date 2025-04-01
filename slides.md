@@ -74,6 +74,12 @@ Some OSes, like Qubes OS, are specifically designed to use driver domains to imp
 In the following attacks, we will attempt to gain full control over the host system, assuming that we have control over a driver domain, and the platform does not support Interrupt Remapping (true for all client systems before Sandy Bridge CPUs). These attacks have been conducted on a 64-bit Xen 4.0.1 hypervisor.
 
 ---
+layout: image
+image: /images/attack_scenario.png
+backgroundSize: contain
+---
+
+---
 
 ## Message Signaled Interrupts (MSI)
 
@@ -106,7 +112,7 @@ Any PCIe writes transaction with `0xFEEXXXX` as the address results in an interr
 The two most important fields are:
 
 - The `Vector` field specifies the interrupt number that will be signaled to the CPU (allowed values in the range `0x10`-`0xFE`).
-- The `Delivery Mode` field specifies how the interrupt will be delivered to the CPU.
+- The `Delivery Mode` field specifies how the interrupt should be interpreted by the LAPIC (Local Advanced Programmable Interrupt Controller).
 
 </div>
 
@@ -120,7 +126,7 @@ MSI-capable PCIe devices contain special registers in their PCI configuration sp
 
 However, some hypervisors, such as Xen, may restrict driver domains from fully configuring assigned devices configuration space.
 
-But no worries, each device has a database of per-device *quirks*, i.e. configuration space registers listing, to which the guest should have write access. Furthermore, we can set the `permissive` flag to the Xen PCI backend, allowing the guest to write to any configuration space register.
+Nevertheless, each device has a database of per-device *quirks*, i.e. configuration space registers listing, to which the guest should have write access. Furthermore, we can set the `permissive` flag to the Xen PCI backend, allowing the guest to write to any configuration space register.
 
 ---
 
@@ -138,7 +144,9 @@ C.f. [the paper](https://invisiblethingslab.com/resources/2011/Software%20Attack
 
 SIPI (Startup Inter-Processor Interrupt) is used by the BIOS to initialize all the CPUs in the system. When a system boots, only one CPU is active, called the BSP (Bootstrap Processor). The BIOS then sends a SIPI to all the other CPUs to wake them up.
 
-The Intel documentation specifies that a SIPI interrupt can be delivered via programming the LAPIC (Local Advanced Programmable Interrupt Controller) register, called *Interrupt Command Register* (ICR), and are mapped into physical address space (typically starting at `0xFEE00000`).
+The Intel documentation specifies that a SIPI interrupt can be delivered via programming the LAPIC register, called *Interrupt Command Register* (ICR), and are mapped into physical address space (typically starting at `0xFEE00000`) and can by accessed only from a CPU.
+
+However, there is a way to generate SIPI interrupts also from PCIe devices...
 
 ---
 
@@ -172,7 +180,7 @@ MSI packets can additionally specify a `Vector` field, which is interpreted as p
 
 We can restart one of the CPUs in the system, and make it execute arbitrary code from an arbitrary address (limited to `0xVV000`), meaning that if an attacker managed to put a shellcode below the 1MB range, he can execute it, and gain access to the full system memory, e.g. all processes of VMs memory.
 
-However, it is quite difficult to find meaningful instructions in the physical memory below 1MB, starting at page boundaries. This is a system-software-specific challenge, but not impossible.
+However, it is quite difficult to find meaningful instructions in the physical memory below 1MB, starting at page boundaries (aligned to `0x1000`). This is a system-software-specific challenge, but not impossible.
 
 ---
 
@@ -182,7 +190,7 @@ Inter CPUs block INIT interrupt when a CPU is in the VMX root mode (VT-x). Howev
 
 If the OS or hypervisor doesn't clean the memory, the attacker's shellcode will be able to steal data that remains in DRAM.
 
-Shellcode will be executed with high permissions, so it can spawn additional attacks (BIOS flash, TXT bypassing, ...).
+Shellcode will be executed with high permissions (`ring0`), so it can spawn additional attacks (BIOS flash, TXT bypassing, ...).
 
 However, if the system runs in the SMX mode, an INIT interrupt causes immediate platform shutdown if outside of VMX: the attack doesn't work against TXT-loaded systems.
 
@@ -220,7 +228,7 @@ In consequence, after injecting a hypercall interrupt, the LAPIC will be expecti
 
 The attack is not very practical, as it requires a lot of timing and luck. It still is a good example of how MSI attacks can be used to inject interrupts into the system.
 
-However, this attack could be reliably used in practice to escape from a driver domain on an Xen system.
+However, this attack could be *reliably* used in practice to escape from a driver domain on an Xen system.
 
 ---
 
@@ -233,7 +241,7 @@ We try to confuse the CPU about the stack layout that the exception handler expe
 An MSI with vector `0x11`, corresponds to `#AC` (Alignment Check) exception, which is quite convenient since it meets two requirements:
 
 - Has a vector number greater than 15, so it can be delivered via MSI
-- Is interpreted as an exception that stores an error code on the stack
+- Is interpreted as an exception that stores an error code on the stack, causing a stack layout confusion.
 
 ---
 
