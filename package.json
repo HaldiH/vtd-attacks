@@ -2,7 +2,7 @@
   "name": "vtd-attacks",
   "private": true,
   "scripts": {
-    "build": "slidev build",
+    "build": "slidev build --download",
     "dev": "slidev --open",
     "remote": "slidev --remote",
     "export": "slidev export"
